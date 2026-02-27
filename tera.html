@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeraBox Web Downloader</title>
+    <style>
+        :root {
+            --primary: #007bff;
+            --success: #28a745;
+            --info: #17a2b8;
+            --bg: #f8f9fa;
+            --card-bg: #ffffff;
+            --text: #212529;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 650px;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        }
+
+        h2 { 
+            text-align: center; 
+            margin-top: 0;
+            color: var(--primary);
+            font-weight: 800;
+        }
+
+        p.subtitle {
+            text-align: center;
+            color: #6c757d;
+            margin-bottom: 25px;
+            font-size: 0.9rem;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+
+        input {
+            flex: 1;
+            padding: 14px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            outline: none;
+            transition: border-color 0.2s;
+            font-size: 1rem;
+        }
+
+        input:focus { border-color: var(--primary); }
+
+        button {
+            padding: 0 25px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.1s, opacity 0.2s;
+        }
+
+        button:active { transform: scale(0.98); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        #results { margin-top: 20px; }
+
+        .file-card {
+            border: 1px solid #edf2f7;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            background: #ffffff;
+            transition: box-shadow 0.2s;
+        }
+
+        .file-card:hover { box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+
+        .file-info { margin-bottom: 18px; }
+        .file-name { 
+            font-weight: 700; 
+            display: block; 
+            word-break: break-all; 
+            font-size: 1.1rem;
+            margin-bottom: 4px;
+        }
+        .file-size { font-size: 0.85rem; color: #6c757d; text-transform: uppercase; }
+
+        .actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn-action {
+            flex: 1;
+            text-align: center;
+            text-decoration: none;
+            font-size: 0.9rem;
+            padding: 10px;
+            border-radius: 6px;
+            color: white;
+            font-weight: 600;
+        }
+
+        .btn-stream { background: var(--success); }
+        .btn-download { background: var(--info); }
+
+        .loader {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+            color: var(--primary);
+        }
+
+        .error-msg {
+            color: #dc3545;
+            background: #fff5f5;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #feb2b2;
+            margin-top: 20px;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>TeraBox Downloader</h2>
+    <p class="subtitle">Convert your links into direct download & stream paths</p>
+    
+    <div class="input-group">
+        <input type="text" id="urlInput" placeholder="Paste your TeraBox link here...">
+        <button id="fetchBtn">Extract</button>
+    </div>
+
+    <div id="loader" class="loader">🔍 Analyzing link via proxy...</div>
+    <div id="results"></div>
+</div>
+
+<script>
+    const fetchBtn = document.getElementById('fetchBtn');
+    const urlInput = document.getElementById('urlInput');
+    const resultsDiv = document.getElementById('results');
+    const loader = document.getElementById('loader');
+
+    fetchBtn.addEventListener('click', async () => {
+        const url = urlInput.value.trim();
+        if (!url) return alert("Please provide a TeraBox URL.");
+
+        // Clear UI
+        resultsDiv.innerHTML = '';
+        loader.style.display = 'block';
+        fetchBtn.disabled = true;
+
+        try {
+            /** * We use 'corsproxy.io' as a middleman. 
+             * It takes the target request and adds the necessary headers 
+             * so your browser doesn't block the data.
+             */
+            const targetUrl = "https://teraboxdl.site/api/proxy";
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+
+            const response = await fetch(proxyUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: url })
+            });
+
+            if (!response.ok) throw new Error("The proxy or API rejected the request.");
+
+            const data = await response.json();
+            const fileList = data.list || [];
+
+            if (fileList.length === 0) {
+                resultsDiv.innerHTML = "<p style='text-align:center'>No files found. Check if the link is valid.</p>";
+            } else {
+                renderFiles(fileList);
+            }
+        } catch (error) {
+            resultsDiv.innerHTML = `
+                <div class="error-msg">
+                    <strong>Fetch Error:</strong> ${error.message}<br><br>
+                    <em>Note: Public proxies can be temperamental. If this persists, the API might be down or blocking the proxy.</em>
+                </div>`;
+            console.error(error);
+        } finally {
+            loader.style.display = 'none';
+            fetchBtn.disabled = false;
+        }
+    });
+
+    function renderFiles(files) {
+        files.forEach(file => {
+            const card = document.createElement('div');
+            card.className = 'file-card';
+            
+            card.innerHTML = `
+                <div class="file-info">
+                    <span class="file-name">${file.server_filename || 'Unknown File'}</span>
+                    <span class="file-size">📦 ${file.formatted_size || 'Unknown Size'}</span>
+                </div>
+                <div class="actions">
+                    ${file.stream_url ? `<a href="${file.stream_url}" target="_blank" class="btn-action btn-stream">Play Stream</a>` : ''}
+                    ${file.direct_link ? `<a href="${file.direct_link}" target="_blank" class="btn-action btn-download">Download</a>` : ''}
+                </div>
+            `;
+            resultsDiv.appendChild(card);
+        });
+    }
+</script>
+
+</body>
+</html>
